@@ -1,35 +1,46 @@
 import streamlit as st
 from transformers import pipeline
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForSequenceClassification
+import torch
 
-# Caching the pipelines to avoid reloading every time
 @st.cache_resource
-def load_pipelines():
-    # Better-supported models
-    question_generator = pipeline("text2text-generation", model="google/flan-t5-small")
-    answer_evaluator = pipeline("text-classification", model="mrm8488/bert-tiny-finetuned-sst2")
-    return question_generator, answer_evaluator
+def load_models():
+    # Question generation model (safe and small)
+    q_model = AutoModelForSeq2SeqLM.from_pretrained("iarfmoose/t5-base-question-generator")
+    q_tokenizer = AutoTokenizer.from_pretrained("iarfmoose/t5-base-question-generator")
+    # Answer evaluation model (sentiment-based)
+    sentiment_pipe = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+    return q_model, q_tokenizer, sentiment_pipe
 
-q_gen, evaluator = load_pipelines()
+q_model, q_tokenizer, sentiment_pipe = load_models()
 
-# Streamlit UI
+def generate_question(context="Tell me about yourself."):
+    input_text = f"generate question: {context}"
+    input_ids = q_tokenizer.encode(input_text, return_tensors="pt")
+    outputs = q_model.generate(input_ids, max_length=64, num_return_sequences=1)
+    question = q_tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return question
+
+def evaluate_answer(answer):
+    result = sentiment_pipe(answer)[0]
+    label = result['label']
+    score = result['score']
+    return f"Your answer was rated as **{label}** with confidence {score:.2f}."
+
+# --- Streamlit App UI ---
 st.title("🎯 AI Interview Bot")
-st.write("Practice with AI-generated questions and get feedback!")
+st.subheader("Practice answering AI-generated interview questions!")
 
-# Input: Job Role
-job_role = st.text_input("Enter a job role (e.g., Data Scientist, Software Engineer)")
+if st.button("Generate Interview Question"):
+    question = generate_question()
+    st.session_state.question = question
 
-if job_role:
-    with st.spinner("Generating interview question..."):
-        question = q_gen(f"Generate one interview question for a {job_role}")[0]['generated_text']
-        st.subheader("🤖 Interview Question:")
-        st.write(question)
-
-        # Input: User answer
-        answer = st.text_area("Your Answer", height=150)
-
-        if st.button("Submit Answer"):
-            with st.spinner("Evaluating your answer..."):
-                evaluation = evaluator(answer)[0]
-                st.subheader("📝 Evaluation Result:")
-                st.write(f"Label: {evaluation['label']}")
-                st.write(f"Confidence: {evaluation['score']:.2f}")
+if "question" in st.session_state:
+    st.markdown(f"**Interview Question:** {st.session_state.question}")
+    user_answer = st.text_area("Your Answer:")
+    if st.button("Evaluate Answer"):
+        if user_answer.strip():
+            result = evaluate_answer(user_answer)
+            st.success(result)
+        else:
+            st.warning("Please enter your answer before evaluating.")
