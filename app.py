@@ -8,10 +8,14 @@ def load_model():
 
 generator = load_model()
 
-st.title("AI Interview Bot")
-st.subheader("Practice answering AI-generated interview questions!")
+st.title("🎯 AI Interview Bot")
+st.subheader("Get job-specific AI-generated interview questions!")
 
-if st.button("Ask Me a Question"):
-    prompt = "Interview question:"
+# Dropdown for job roles
+job_roles = ["Software Engineer", "Data Scientist", "HR Manager", "Marketing Executive", "Project Manager"]
+selected_role = st.selectbox("Choose a job role:", job_roles)
+
+if st.button("Generate Interview Question"):
+    prompt = f"Interview question for a {selected_role}:"
     result = generator(prompt, max_length=50, num_return_sequences=1)
     st.success(result[0]["generated_text"])
